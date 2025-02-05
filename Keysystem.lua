@@ -1,6 +1,6 @@
-local service = 1735;
-local secret = "efe0275d-13db-49d0-a8e0-e6b3312aa674";
-local useNonce = true;
+local service = 1735
+local secret = "efe0275d-13db-49d0-a8e0-e6b3312aa674"
+local useNonce = true
 
 -- Modern notification function
 local function notify(message, color)
@@ -14,47 +14,57 @@ local function notify(message, color)
     })
 end
 
+repeat task.wait(1) until game:IsLoaded() or game.Players.LocalPlayer
+
 --API
 
---! callbacks
-local onMessage = function(message) end;
+local onMessage = function(message)
+    game:GetService("StarterGui"):SetCore("ChatMakeSystemMessage", { Text = message; })
+end;
 
---! wait for game to load
-repeat task.wait(1) until game:IsLoaded();
+repeat task.wait(1) until game:IsLoaded() or game.Players.LocalPlayer;
 
---! functions
 local requestSending = false;
-local fSetClipboard, fRequest, fStringChar, fToString, fStringSub, fOsTime, fMathRandom, fMathFloor, fGetHwid = setclipboard or toclipboard, request or http_request or syn_request, string.char, tostring, string.sub, os.time, math.random, math.floor, gethwid or function() return game:GetService("Players").LocalPlayer.UserId end
-local cachedLink, cachedTime = "", 0;
+local fSetClipboard, fRequest, fStringChar, fToString, fStringSub, fOsTime, fMathRandom, fMathFloor, fGetHwid = 
+    setclipboard or toclipboard, request or http_request, string.char, tostring, string.sub, os.time, math.random, math.floor, 
+    gethwid or function() return game:GetService("Players").LocalPlayer.UserId end;
 
---! pick host
+local cachedLink, cachedTime = "", 0;
+local HttpService = game:GetService("HttpService");
+
+function lEncode(data) return HttpService:JSONEncode(data) end;
+function lDecode(data) return HttpService:JSONDecode(data) end;
+
+local function lDigest(input)
+    local inputStr = tostring(input);
+    local hash = {};
+    for i = 1, #inputStr do
+        table.insert(hash, string.byte(inputStr, i));
+    end;
+    local hashHex = "";
+    for _, byte in ipairs(hash) do
+        hashHex = hashHex .. string.format("%02x", byte);
+    end;
+    return hashHex;
+end;
+
 local host = "https://api.platoboost.com";
-local hostResponse = fRequest({
-    Url = host .. "/public/connectivity",
-    Method = "GET"
-});
+local hostResponse = fRequest({ Url = host .. "/public/connectivity", Method = "GET" });
 if hostResponse.StatusCode ~= 200 or hostResponse.StatusCode ~= 429 then
     host = "https://api.platoboost.net";
-end
+end;
 
---!optimize 2
 function cacheLink()
-    if cachedTime + (10*60) < fOsTime() then
+    if cachedTime + (10 * 60) < fOsTime() then
         local response = fRequest({
             Url = host .. "/public/start",
             Method = "POST",
-            Body = lEncode({
-                service = service,
-                identifier = lDigest(fGetHwid())
-            }),
-            Headers = {
-                ["Content-Type"] = "application/json"
-            }
+            Body = lEncode({ service = service, identifier = lDigest(fGetHwid()) }),
+            Headers = { ["Content-Type"] = "application/json" }
         });
 
         if response.StatusCode == 200 then
             local decoded = lDecode(response.Body);
-
             if decoded.success == true then
                 cachedLink = decoded.data.url;
                 cachedTime = fOsTime();
@@ -62,207 +72,142 @@ function cacheLink()
             else
                 onMessage(decoded.message);
                 return false, decoded.message;
-            end
+            end;
         elseif response.StatusCode == 429 then
-            local msg = "you are being rate limited, please wait 20 seconds and try again.";
+            local msg = "You are being rate limited, please wait 20 seconds and try again.";
             onMessage(msg);
             return false, msg;
-        end
-
+        end;
         local msg = "Failed to cache link.";
         onMessage(msg);
         return false, msg;
     else
         return true, cachedLink;
-    end
-end
+    end;
+end;
 
 cacheLink();
 
---!optimize 2
 local generateNonce = function()
-    local str = ""
+    local str = "";
     for _ = 1, 16 do
-        str = str .. fStringChar(fMathFloor(fMathRandom() * (122 - 97 + 1)) + 97)
-    end
-    return str
-end
+        str = str .. fStringChar(fMathFloor(fMathRandom() * (122 - 97 + 1)) + 97);
+    end;
+    return str;
+end;
 
---!optimize 1
 for _ = 1, 5 do
     local oNonce = generateNonce();
-    task.wait(0.2)
+    task.wait(0.2);
     if generateNonce() == oNonce then
-        local msg = "platoboost nonce error.";
+        local msg = "Platoboost nonce error.";
         onMessage(msg);
         error(msg);
-    end
-end
+    end;
+end;
 
---!optimize 2
 local copyLink = function()
     local success, link = cacheLink();
-    
     if success then
         fSetClipboard(link);
-    end
-end
+        onMessage("Link copied to clipboard!");
+    end;
+end;
 
---!optimize 2
 local redeemKey = function(key)
     local nonce = generateNonce();
     local endpoint = host .. "/public/redeem/" .. fToString(service);
-
     local body = {
         identifier = lDigest(fGetHwid()),
         key = key
-    }
-
+    };
     if useNonce then
         body.nonce = nonce;
-    end
-
+    end;
     local response = fRequest({
         Url = endpoint,
         Method = "POST",
         Body = lEncode(body),
-        Headers = {
-            ["Content-Type"] = "application/json"
-        }
+        Headers = { ["Content-Type"] = "application/json" }
     });
-
     if response.StatusCode == 200 then
         local decoded = lDecode(response.Body);
-
         if decoded.success == true then
             if decoded.data.valid == true then
                 if useNonce then
                     if decoded.data.hash == lDigest("true" .. "-" .. nonce .. "-" .. secret) then
                         return true;
                     else
-                        onMessage("failed to verify integrity.");
+                        onMessage("Failed to verify integrity.");
                         return false;
-                    end    
+                    end;
                 else
                     return true;
-                end
+                end;
             else
-                onMessage("key is invalid.");
+                onMessage("Key is invalid.");
                 return false;
-            end
+            end;
         else
             if fStringSub(decoded.message, 1, 27) == "unique constraint violation" then
-                onMessage("you already have an active key, please wait for it to expire before redeeming it.");
+                onMessage("You already have an active key, please wait for it to expire before redeeming it.");
                 return false;
             else
                 onMessage(decoded.message);
                 return false;
-            end
-        end
+            end;
+        end;
     elseif response.StatusCode == 429 then
-        onMessage("you are being rate limited, please wait 20 seconds and try again.");
+        onMessage("You are being rate limited, please wait 20 seconds and try again.");
         return false;
     else
-        onMessage("server returned an invalid status code, please try again later.");
-        return false; 
-    end
-end
+        onMessage("Server returned an invalid status code, please try again later.");
+        return false;
+    end;
+end;
 
---!optimize 2
 local verifyKey = function(key)
     if requestSending == true then
-        onMessage("a request is already being sent, please slow down.");
+        onMessage("A request is already being sent, please slow down.");
         return false;
     else
         requestSending = true;
-    end
-
+    end;
     local nonce = generateNonce();
     local endpoint = host .. "/public/whitelist/" .. fToString(service) .. "?identifier=" .. lDigest(fGetHwid()) .. "&key=" .. key;
-
     if useNonce then
         endpoint = endpoint .. "&nonce=" .. nonce;
-    end
-
+    end;
     local response = fRequest({
         Url = endpoint,
         Method = "GET",
     });
-
     requestSending = false;
-
     if response.StatusCode == 200 then
         local decoded = lDecode(response.Body);
-
         if decoded.success == true then
             if decoded.data.valid == true then
-                if useNonce then
-                    if decoded.data.hash == lDigest("true" .. "-" .. nonce .. "-" .. secret) then
-                        return true;
-                    else
-                        onMessage("failed to verify integrity.");
-                        return false;
-                    end
-                else
-                    return true;
-                end
+                return true;
             else
-                if fStringSub(key, 1, 4) == "KEY_" then
+                if fStringSub(key, 1, 4) == "FREE_" then
                     return redeemKey(key);
                 else
-                    onMessage("key is invalid.");
+                    onMessage("Key is invalid.");
                     return false;
-                end
-            end
+                end;
+            end;
         else
             onMessage(decoded.message);
             return false;
-        end
+        end;
     elseif response.StatusCode == 429 then
-        onMessage("you are being rate limited, please wait 20 seconds and try again.");
+        onMessage("You are being rate limited, please wait 20 seconds and try again.");
         return false;
     else
-        onMessage("server returned an invalid status code, please try again later.");
+        onMessage("Server returned an invalid status code, please try again later.");
         return false;
-    end
-end
-
---!optimize 2
-local getFlag = function(name)
-    local nonce = generateNonce();
-    local endpoint = host .. "/public/flag/" .. fToString(service) .. "?name=" .. name;
-
-    if useNonce then
-        endpoint = endpoint .. "&nonce=" .. nonce;
-    end
-
-    local response = fRequest({
-        Url = endpoint,
-        Method = "GET",
-    });
-
-    if response.StatusCode == 200 then
-        local decoded = lDecode(response.Body);
-
-        if decoded.success == true then
-            if useNonce then
-                if decoded.data.hash == lDigest(fToString(decoded.data.value) .. "-" .. nonce .. "-" .. secret) then
-                    return decoded.data.value;
-                else
-                    onMessage("failed to verify integrity.");
-                    return nil;
-                end
-            else
-                return decoded.data.value;
-            end
-        else
-            onMessage(decoded.message);
-            return nil;
-        end
-    else
-        return nil;
-    end
-end
+    end;
+end;
 
 -- Modern GUI Design
 local ScreenGui = Instance.new("ScreenGui")
@@ -328,7 +273,7 @@ Title.BackgroundTransparency = 1.000
 Title.Position = UDim2.new(0.02, 0, 0, 0)
 Title.Size = UDim2.new(0.5, 0, 1, 0)
 Title.Font = Enum.Font.GothamSemibold
-Title.Text = "Qwee Hu3b"
+Title.Text = "PREMIUdM ACCESS"
 Title.TextColor3 = Color3.fromRGB(200, 200, 200)
 Title.TextSize = 14.000
 Title.TextXAlignment = Enum.TextXAlignment.Left
@@ -425,7 +370,7 @@ CheckKeyButton.MouseButton1Click:Connect(function()
     if valid then
         notify("Access granted! Loading...", Color3.fromRGB(0, 200, 0))
         ScreenGui:Destroy()
-        loadstring(game:HttpGet("https://raw.githubusercontent.com/TrekRAT/B4edsapksda/main/script444.lua"))()
+        loadstring(game:HttpGet("https://pastebin.com/raw/34dZHb49"))()
     else
         notify("Invalid key! Please try again.", Color3.fromRGB(200, 50, 50))
         KeyBox.Text = ""
