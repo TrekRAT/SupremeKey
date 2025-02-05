@@ -43,7 +43,8 @@ local function lDigest(input)
     for _, byte in ipairs(hash) do
         hashHex = hashHex .. string.format("%02x", byte)
     end
-    return hashHex
+    -- Ensure the hash is no longer than 255 characters
+    return string.sub(hashHex, 1, 255)
 end
 
 -- API host
@@ -117,8 +118,21 @@ local function copyLink()
     end
 end
 
+-- Validate key length
+local function validateKey(key)
+    if #key > 16 then
+        notify("Key is too long. Maximum length is 16 characters.", Color3.fromRGB(255, 0, 0))
+        return false
+    end
+    return true
+end
+
 -- Redeem key function
 local function redeemKey(key)
+    if not validateKey(key) then
+        return false
+    end
+
     local nonce = generateNonce()
     local endpoint = host .. "/public/redeem/" .. fToString(service)
     local body = {
@@ -174,6 +188,10 @@ end
 
 -- Verify key function
 local function verifyKey(key)
+    if not validateKey(key) then
+        return false
+    end
+
     local nonce = generateNonce()
     local endpoint = host .. "/public/whitelist/" .. fToString(service) .. "?identifier=" .. lDigest(fGetHwid()) .. "&key=" .. key
     if useNonce then
