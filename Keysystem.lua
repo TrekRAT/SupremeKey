@@ -1,6 +1,6 @@
-local service = 1735
-local secret = "efe0275d-13db-49d0-a8e0-e6b3312aa674"
-local useNonce = true
+local service = 1735;
+local secret = "efe0275d-13db-49d0-a8e0-e6b3312aa674";
+local useNonce = true;
 
 -- Modern notification function
 local function notify(message, color)
